@@ -1,0 +1,21 @@
+# Runs with zero setup — no API key, no network access.
+# Try it:  vikar play examples/hello.yaml
+
+models:
+  demo:
+    kind: mock
+    prefix: "[demo model] "
+
+tasks:
+  - name: greet
+    kind: ask
+    model: demo
+    prompt: "Hello from Vikar!"
+    register: greeting
+
+  - name: show_greeting
+    kind: run
+    # allow_agent_output is required whenever a command interpolates a
+    # value that came from an `ask` task — deny-by-default, see the README.
+    command: "echo 'Model said:' && echo '{{ greeting }}'"
+    allow_agent_output: true

@@ -1,0 +1,39 @@
+[package]
+name = "vikar-cli"
+description = "The vikar CLI binary: built-in task kinds, built-in model providers, and the playbook compiler/runner."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "vikar"
+path = "src/main.rs"
+
+[dependencies]
+vikar-core = { path = "../vikar-core" }
+vikar-config = { path = "../vikar-config" }
+
+tokio.workspace = true
+async-trait.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+clap.workspace = true
+reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls"] }
+serde = { workspace = true }
+dotenvy = "0.15"
+
+# --- Version pins below ---------------------------------------------------
+# This scaffold was built/verified against apt's packaged Rust 1.75. Some
+# transitive deps' *newest* releases require the edition2024 Cargo feature,
+# which 1.75 can't parse, so they're pinned to the last pre-edition2024
+# release here. If you're building with a current stable toolchain
+# (1.85+), these pins are almost certainly safe to delete — try removing
+# them first and only keep what `cargo build` actually complains about.
+indexmap = "=2.2.6"
+url = "=2.5.0"
+idna = "=0.5.0"
+encoding_rs = "=0.8.34"

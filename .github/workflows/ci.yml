@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build --workspace --verbose
+      - run: cargo test --workspace --verbose
+      - name: Run the zero-setup demo (no API key required)
+        run: |
+          cargo run -p vikar-cli --bin vikar -- plan examples/hello.yaml
+          cargo run -p vikar-cli --bin vikar -- play examples/hello.yaml
+          cargo run -p vikar-cli --bin vikar -- play examples/remediate.yaml
+      - name: Run `vikar init` and its mock demo
+        run: |
+          mkdir -p /tmp/vikar-init-smoke && cd /tmp/vikar-init-smoke
+          cargo run --manifest-path $GITHUB_WORKSPACE/Cargo.toml -p vikar-cli --bin vikar -- init
+          cargo run --manifest-path $GITHUB_WORKSPACE/Cargo.toml -p vikar-cli --bin vikar -- play .agents/playbooks/mock-demo.yaml
+          cargo run --manifest-path $GITHUB_WORKSPACE/Cargo.toml -p vikar-cli --bin vikar -- init  # re-run: must be idempotent
+
+  fmt-clippy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings

@@ -1,0 +1,15 @@
+[package]
+name = "vikar-core"
+description = "Core abstractions for Vikar: Task, Model, Context, Runner. No I/O, no built-in task kinds."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+minijinja.workspace = true
+tracing.workspace = true

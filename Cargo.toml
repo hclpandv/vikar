@@ -1,0 +1,35 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/vikar-core",
+    "crates/vikar-config",
+    "crates/vikar-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/YOUR_ORG/vikar"
+authors = ["Vikar contributors"]
+
+[workspace.dependencies]
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+async-trait = "0.1"
+thiserror = "1"
+anyhow = "1"
+minijinja = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+# Pinned to a pre-edition2024 release — see the pin note in
+# crates/vikar-cli/Cargo.toml. Likely safe to bump to "4" on a modern toolchain.
+clap = { version = "=4.5.4", features = ["derive"] }
+
+# Pinned so the workspace builds on the apt-packaged Rust 1.75 toolchain:
+# newer releases of these transitive deps require edition2024, which this
+# older cargo can't parse. Safe to unpin once contributors build on a
+# current stable toolchain (1.85+).
+indexmap = "=2.2.6"

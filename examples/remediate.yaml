@@ -1,0 +1,42 @@
+# The "Ansible for agents" hero example: mix a shell command, an LLM call,
+# and a loop in one playbook. Uses the mock model so you can run it right
+# now with no API key — swap `kind: mock` for `kind: anthropic` (and set
+# ANTHROPIC_API_KEY) to use a real model.
+#
+# Try it:  vikar play examples/remediate.yaml
+
+models:
+  triage:
+    kind: mock
+    prefix: "[demo model] "
+
+tasks:
+  - name: fetch_status
+    kind: run
+    command: "echo 'disk_usage=92%'"
+    register: status
+
+  - name: remediate_loop
+    kind: until
+    # `condition:` is a bare Jinja expression (like Ansible's `when:`), not
+    # wrapped in {{ }}. In a real playbook this would inspect the model's
+    # structured judgment (e.g. `assessment.resolved == true`); the mock
+    # model just echoes text, so this demo loop resolves after its first pass.
+    condition: "loop_iterations is defined"
+    max_iterations: 3
+    tasks:
+      - name: assess
+        kind: ask
+        model: triage
+        prompt: "Given {{ status.stdout }}, suggest a remediation step."
+        register: assessment
+
+      - name: apply_fix
+        kind: run
+        command: "echo 'Applying:' '{{ assessment }}'"
+        allow_agent_output: true
+
+      - name: mark_done
+        kind: run
+        command: "echo 'loop_iterations=1'"
+        register: loop_iterations
