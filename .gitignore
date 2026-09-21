@@ -2,3 +2,5 @@
 .env
 *.pdb
 .agents/
+.reports/
+
