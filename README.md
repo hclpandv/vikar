@@ -1,12 +1,187 @@
-# Vikar
+<div align="center">
 
-**Vikar** dispatches a workforce of substitute agents to do your work,
-declared as data. Mix LLM calls, shell commands, and loops in one YAML
-playbook, and run it as a single, dependency-free Rust binary — no Python
-venv, no server, no infra.
+# 🦀 Vikar
 
-> *"vikar"* (Norwegian, Bokmål) — a substitute or temp worker, sent to fill
-> a role. That's exactly what an `ask` task is.
+### A workforce of substitute agents, declared as data.
+Mix **LLM calls**, **shell commands** and **loops** in one YAML playbook.
+Run it as a **single Rust binary**: no Python venv, no server, no infra.
+
+![Rust](https://img.shields.io/badge/Rust-Single_Binary-DEA584?logo=rust&logoColor=black)
+![YAML](https://img.shields.io/badge/Playbooks-YAML-CB171E?logo=yaml&logoColor=white)
+![License](https://img.shields.io/badge/License-MIT_OR_Apache--2.0-blue)
+![Version](https://img.shields.io/badge/Version-v0.1-orange)
+![No Infra](https://img.shields.io/badge/Infra-None-success)
+
+</div>
+
+---
+
+> 🇳🇴 ***"vikar"*** (Norwegian, Bokmål): a substitute or temp worker, sent to fill a role.
+> That's exactly what an `ask` task is.
+
+## ⚡ See It in 10 Lines
+
+```yaml
+models:
+  helper:
+    kind: ollama            # or anthropic, openai_compatible, mock
+    model: llama3
+
+tasks:
+  - name: disk_usage
+    kind: run
+    command: "df -h /"
+    register: disk
+    allow_agent_output: true
+
+  - name: explain
+    kind: ask
+    model: helper
+    prompt: "In two sentences, is this disk healthy? {{ disk.stdout }}"
+```
+
+```bash
+vikar play playbook.yaml
+```
+
+> 💼 **Real-world example:** the repo's flagship playbook audits an **Azure subscription for cost waste** (unattached disks, orphaned public IPs, stopped-but-billing VMs). It queries Azure Resource Graph, has an LLM write a prioritized fix list with exact `az` commands, and saves a Markdown report. [See the full playbook ↓](#-full-example-azure-finops-audit)
+
+---
+
+## 🚀 Try It Now (No API Key Needed)
+
+```bash
+cargo install --path crates/vikar-cli
+vikar init
+vikar play .agents/playbooks/mock-demo.yaml
+```
+
+`vikar init` scaffolds a ready-to-run `.agents/` workspace:
+
+| File | Purpose |
+|---|---|
+| `.env` | 🔑 Gitignored home for your API keys |
+| `mock-demo.yaml` | 🧪 Deterministic, offline demo, no key needed |
+| `limerick-nvidia.yaml` | 🌐 Real hosted model (add `NVIDIA_API_KEY` to `.env`) |
+
+Keys are found the way `git` finds `.git`: Vikar searches the current directory and its parents for `.agents/.env`, then `.env`. A key already exported in your shell or CI runner always wins.
+
+**Go live** by swapping `kind: mock` for `anthropic`, `ollama` (local, no key), or `openai_compatible` (OpenAI, vLLM, LM Studio, or anything speaking the OpenAI chat schema).
+
+---
+
+## 🤔 Why Not LangGraph / CrewAI / AutoGen?
+
+Those are mature, Python/JS-first frameworks, and if you're already in that ecosystem they're a fine choice. Vikar is for a different shape of problem:
+
+> **You want to drop an agentic step into a pipeline with zero tolerance for infra.**
+> A CI job. A cron on a bare VM. A container with no Python runtime.
+
+| | Vikar |
+|---|---|
+| 📦 **Distribution** | One static binary |
+| 🐍 **Runtime** | No Python, no Node |
+| 🖥️ **Server / daemon** | None |
+| 🗄️ **Database** | None |
+| 📝 **Workflow format** | Declarative YAML |
+| 🚦 **CI-friendly** | Non-zero exit on failure, `--output-json` for pipelines |
+
+---
+
+## 🧩 Core Vocabulary
+
+| Concept | Meaning |
+|---|---|
+| 📜 **Playbook** | The YAML file describing what to do |
+| 🔧 **Task** | One step: `ask`, `run` or `until` |
+| 🤖 **Model** | A named LLM backend under `models:` |
+| 🧠 **Context** | Flat, shared state: `register:` writes it, `{{ }}` reads it |
+
+### Three task kinds (v0.1, deliberately)
+
+| Kind | What it does |
+|---|---|
+| 🗣️ **`ask`** | Calls an LLM (`model:`, `prompt:`, optional `register:`) |
+| 💻 **`run`** | Runs a shell command (`command:`, optional `register:`, `allow_agent_output:`) |
+| 🔁 **`until`** | Repeats nested `tasks:` until `condition:` is true or `max_iterations:` is hit |
+
+---
+
+## 🛡️ Security: Agent Output Is Untrusted by Default
+
+An LLM's output is not trusted input. If a `command:` template interpolates **any** variable, Vikar refuses to run it unless the task sets `allow_agent_output: true`.
+
+```yaml
+- kind: run
+  command: "./remediate.sh '{{ summary.action }}'"
+  allow_agent_output: true   # required, since summary came from an `ask` task
+```
+
+**Deny-by-default:** a playbook oversight produces a clear error, not a silent command injection.
+
+> ⚠️ `run` tasks are **not sandboxed** in v0.1 beyond this opt-in flag. Sandboxing is planned, but don't assume it today.
+
+---
+
+## 🎛️ CLI
+
+```bash
+vikar init                                # scaffold a .agents/ workspace with demo playbooks
+vikar plan <playbook.yaml>                # validate + print the plan (no execution, no network)
+vikar play <playbook.yaml>                # execute
+vikar play <playbook.yaml> --output-json  # machine-readable output for pipelines
+```
+
+`vikar play` exits `0` on success and non-zero on any task failure, unmet `until` condition or config error, so it is safe to gate a CI step on.
+
+---
+
+## 🏗️ Architecture
+
+Four small abstractions in `vikar-core`. Everything else is a plugin against one of them.
+
+| Abstraction | Role |
+|---|---|
+| **`Task`** | The unit of execution (`ask`, `run`, `until`) |
+| **`Model`** | The LLM provider boundary (Anthropic, OpenAI-compatible, Mock) |
+| **`Context`** | Flat shared state threaded through every task |
+| **`Runner`** | Walks a linear list of tasks, stops on first error |
+
+```
+crates/
+├── vikar-core    # the four traits: zero I/O, zero built-ins
+├── vikar-config  # YAML schema (serde) + validation, no vikar-core dependency
+└── vikar-cli     # built-in task kinds, providers, and the `vikar` binary
+```
+
+`vikar-core` never depends on the other crates, so `cargo add vikar-core` gives you just the traits for a fully custom task/provider set.
+
+**Extending is additive:** one new config variant, one new `Task`/`Model` implementation, one new registry arm. See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+---
+
+## 🗺️ Scope & Roadmap
+
+v0.1 proves one sentence:
+
+> *You can write a YAML playbook that mixes an LLM call and a shell command, with a loop, and run it as a single binary with zero setup.*
+
+Deliberately out of scope for now, roughly in the order they'll likely return:
+
+- [ ] `kind: script` (a `run` variant with an explicit interpreter)
+- [ ] `when:` conditionals outside `until`
+- [ ] 🔒 Sandboxed / restricted execution for `run` tasks
+- [ ] Streaming, tool-calling and multi-turn history in `ask`
+- [ ] ⚡ Parallel tasks and DAG dependencies (today: strictly linear)
+- [ ] Retries and per-task `continue_on_error:`
+- [ ] Dynamic plugin loading (today: compile-time registry, matching the single-binary constraint)
+
+---
+
+## 💼 Full Example: Azure FinOps Audit
+
+<details>
+<summary><b>Click to expand the full playbook</b></summary>
 
 ```yaml
 models:
@@ -63,7 +238,6 @@ tasks:
       --query "data" -o json
     register: stopped_vms
     allow_agent_output: true
-    
 
   - name: analyze
     kind: ask
@@ -101,142 +275,20 @@ tasks:
     allow_agent_output: true
 ```
 
-```
-vikar play playbook.yaml
-```
+</details>
 
-## Try it now, no API key required
+---
 
-```
-cargo install --path crates/vikar-cli
-vikar init
-vikar play .agents/playbooks/mock-demo.yaml
-```
+## 🤝 Contributing
 
-`vikar init` scaffolds a `.agents/` workspace: a gitignored `.env` for your
-API keys, and two demo playbooks — `mock-demo.yaml` (deterministic,
-offline, no key needed) and `limerick-nvidia.yaml` (a real hosted model,
-once you've added `NVIDIA_API_KEY` to `.env`). It's meant to be a running
-starting point, not a blank folder — add your own playbooks alongside the
-demos.
+New task kinds, providers and ideas are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
-Keys in `.agents/.env` are picked up automatically: `vikar` searches the
-current directory and its parents for `.agents/.env`, then plain `.env`,
-the same way `git` finds `.git`. A key already exported in your shell (or
-injected by a CI runner) always takes priority over the same name in a
-`.env` file.
+## 📄 License
 
-Swap `kind: mock` for `kind: anthropic`, `kind: ollama` (a local server,
-no key needed), or `kind: openai_compatible` (OpenAI itself, vLLM, LM
-Studio, or anything else speaking the OpenAI chat schema) to go live.
+Dual-licensed under **MIT OR Apache-2.0**, at your option.
 
-## Why not LangGraph / CrewAI / AutoGen?
+<div align="center">
 
-Those are mature, Python/JS-first multi-agent frameworks, and if you're
-already in that ecosystem they're a fine choice. Vikar exists for a
-different shape of problem: **you want to drop an agentic step into a
-pipeline that has zero tolerance for infra** — a CI job, a cron on a bare
-VM, a container with no Python runtime. Vikar is a single static binary
-with no daemon, no database, and no server to stand up first.
+**If Vikar saves you from standing up infra, give it a ⭐**
 
-## Core vocabulary
-
-| Concept | Meaning |
-|---|---|
-| **Playbook** | the YAML file describing what to do |
-| **Task** | one step — `kind: ask`, `kind: run`, or `kind: until` |
-| **Model** | a named LLM backend under `models:`, referenced by an `ask` task |
-| **Context** | the flat, shared state that `register:` writes into and `{{ }}` reads from |
-
-Three task kinds in v0.1, deliberately:
-
-- **`ask`** — calls an LLM (`model:`, `prompt:`, optional `register:`)
-- **`run`** — runs a shell command (`command:`, optional `register:`,
-  `allow_agent_output:` — see **Security** below)
-- **`until`** — repeats a nested `tasks:` list until `condition:` (a bare
-  Jinja expression, like Ansible's `when:`) is true, or `max_iterations:`
-  is hit
-
-No DAGs, no parallel execution, no conditionals outside `until` yet. See
-[Scope](#scope--roadmap) below for what's deliberately left out of v0.1
-and why.
-
-## Security: agent output is untrusted by default
-
-An LLM's output is not trusted input. If a `command:` template
-interpolates a variable — regardless of where that variable came from —
-Vikar refuses to run it unless the task sets `allow_agent_output: true`.
-This is deny-by-default: an oversight in a playbook produces a clear error,
-not a silent command injection.
-
-```yaml
-- kind: run
-  command: "./remediate.sh '{{ summary.action }}'"
-  allow_agent_output: true   # required — summary came from an `ask` task
-```
-
-There is no sandboxing of `run` tasks in v0.1 beyond this opt-in flag —
-that's a real, planned feature (see Scope), not something to assume is
-handled.
-
-## CLI
-
-```
-vikar init                              # scaffold a .agents/ workspace with demo playbooks
-vikar plan <playbook.yaml>              # validate + print the plan, no execution, no network
-vikar play <playbook.yaml>              # execute
-vikar play <playbook.yaml> --output-json  # machine-readable output for pipelines
-```
-
-`vikar play` exits `0` on success and non-zero on any task failure, an
-unmet `until` condition, or a config error — safe to gate a CI step on.
-
-## Architecture
-
-Four abstractions, deliberately small, in `vikar-core` — everything else is
-a plugin against one of them:
-
-- **`Task`** — the unit of execution (`ask`, `run`, `until` all implement
-  this; nothing else in the system needs to know which one it's holding)
-- **`Model`** — the LLM provider boundary (Anthropic, OpenAI-compatible,
-  Mock all implement this)
-- **`Context`** — flat, shared state threaded through every task
-- **`Runner`** — walks a linear list of `Task`s, stops on first error
-
-```
-crates/
-├── vikar-core    # the four traits above — zero I/O, zero built-ins
-├── vikar-config  # the YAML schema (serde structs) + validation — zero vikar-core dependency
-└── vikar-cli     # built-in task kinds, built-in providers, the `vikar` binary
-```
-
-`vikar-core` never depends on `vikar-config` or `vikar-cli` — only the
-reverse. That's what lets `cargo add vikar-core` pull in just the traits,
-for anyone building a completely custom task/provider set without Vikar's
-own built-ins.
-
-Adding a new task kind or provider is additive: one new `TaskConfig` /
-`ModelConfig` variant, one new `Task` / `Model` implementation, one new
-arm in `vikar-cli`'s compiler/registry. See
-[`CONTRIBUTING.md`](CONTRIBUTING.md).
-
-## Scope & roadmap
-
-v0.1 proves one sentence: *you can write a YAML playbook that mixes an LLM
-call and a shell command, with a loop, and run it as a single binary with
-zero setup.* Deliberately out of scope for now, roughly in the order
-they'll likely come back:
-
-- `kind: script` (a `run` variant with an explicit interpreter — mostly
-  sugar over `run`)
-- `when:` conditionals outside `until`
-- Sandboxed/restricted execution for `run` tasks
-- Streaming, tool-calling, multi-turn history in `ask`
-- Parallel tasks / DAG dependencies (today: strictly linear)
-- Retries / `continue_on_error:` per task
-- Dynamic plugin loading (today: compile-time registry, matching the
-  single-static-binary constraint)
-
-## License
-
-MIT OR Apache-2.0, at your option.
+</div>
