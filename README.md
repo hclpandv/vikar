@@ -44,7 +44,7 @@ tasks:
 vikar play playbook.yaml
 ```
 
-> 💼 **Real-world example:** the repo's flagship playbook audits an **Azure subscription for cost waste** (unattached disks, orphaned public IPs, stopped-but-billing VMs). It queries Azure Resource Graph, has an LLM write a prioritized fix list with exact `az` commands, and saves a Markdown report. [See the full playbook ↓](#full-example-azure-finops-audit)
+> 💼 **Real-world example:** a playbook that audits an **Azure subscription for cost waste** (unattached disks, orphaned public IPs, stopped-but-billing VMs). It queries Azure Resource Graph, has an LLM write a prioritized fix list with exact `az` commands, and saves a Markdown report. [View the playbook →](examples/azure-finops-audit.yaml)
 
 ---
 
